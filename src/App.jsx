@@ -18,6 +18,7 @@ function App() {
   const [campoGuardado, setCampoGuardado] = useState(null);
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('Todos los estados');
+  const [vistaActiva, setVistaActiva] = useState('panel'); // Puede ser 'panel' o 'historial'
 
   // --- ESTADOS DEL MODAL Y CLONADOR ---
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -156,6 +157,7 @@ function App() {
       setBusquedaHistorial('');
       setSugerencias([]);
       fetchPedidos();
+      setVistaActiva('panel');
     }
   };
 
@@ -200,6 +202,15 @@ function App() {
     const coincideBusqueda = pedido.cliente.toLowerCase().includes(busqueda.toLowerCase()) || (pedido.celular && pedido.celular.includes(busqueda));
     const coincideEstado = filtroEstado === 'Todos los estados' || pedido.estado === filtroEstado;
     return coincideBusqueda && coincideEstado;
+  });
+
+  const pedidosHistorial = pedidos.filter(pedido => {
+    // MAGIA INVERSA: Solo muestra los entregados o cancelados
+    if (pedido.estado !== 'Entregado' && pedido.estado !== 'Cancelado') return false;
+
+    // Mantenemos el buscador funcional también en el historial
+    const coincideBusqueda = pedido.cliente.toLowerCase().includes(busqueda.toLowerCase()) || (pedido.celular && pedido.celular.includes(busqueda));
+    return coincideBusqueda;
   });
 
   const chipsNormales = ['1A', 'Aula#2', '1C', '3B Tercera', '#4 Abrigo', 'SG', 'Parka', 'KP'];
@@ -255,8 +266,24 @@ function App() {
             <button className="md:hidden text-gray-400 hover:text-white" onClick={() => setMenuAbierto(false)}>✕</button>
           </div>
           <nav className="p-4 space-y-2">
-            <button className="w-full text-left px-4 py-3 bg-blue-600 rounded-lg font-medium shadow-md">Panel Principal</button>
-            <button onClick={() => { setIsModalOpen(true); setMenuAbierto(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-800 rounded-lg font-medium transition-colors">+ Nuevo Pedido</button>
+            <button 
+              onClick={() => { setVistaActiva('panel'); setMenuAbierto(false); }} 
+              className={`w-full text-left px-4 py-3 rounded-lg font-medium shadow-md transition-colors ${vistaActiva === 'panel' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
+            >
+              Panel Principal
+            </button>
+            <button 
+              onClick={() => { setVistaActiva('historial'); setMenuAbierto(false); }} 
+              className={`w-full text-left px-4 py-3 rounded-lg font-medium shadow-md transition-colors ${vistaActiva === 'historial' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
+            >
+              Historial de Pedidos
+            </button>
+            <button 
+              onClick={() => { setIsModalOpen(true); setMenuAbierto(false); }} 
+              className="w-full text-left px-4 py-3 hover:bg-gray-800 text-gray-300 rounded-lg font-medium transition-colors"
+            >
+              + Nuevo Pedido
+            </button>
           </nav>
         </div>
         
@@ -273,20 +300,23 @@ function App() {
           <button className="md:hidden mr-4 text-gray-600 hover:text-gray-900" onClick={() => setMenuAbierto(true)}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
-          <h1 className="text-xl font-semibold text-gray-800">Panel de Control</h1>
+          <h1 className="text-xl font-semibold text-gray-800">
+            {vistaActiva === 'panel' ? 'Panel de Control' : 'Historial de Pedidos'}
+          </h1>
         </header>
 
         <div className="p-4 md:p-8 flex-1 overflow-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div className="w-full max-w-2xl flex flex-col sm:flex-row gap-4">
               <input type="text" placeholder="🔍 Buscar por nombre o celular..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
-              <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                <option value="Todos los estados">Todos los estados</option>
-                <option value="Pendiente">Pendiente</option>
-                <option value="En Proceso">En Proceso</option>
-                <option value="Listo para Entrega">Listo para Entrega</option>
-                <option value="Cancelado">Cancelado</option>
-              </select>
+              {vistaActiva === 'panel' && (
+                <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                  <option value="Todos los estados">Todos los estados</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="En Proceso">En Proceso</option>
+                  <option value="Listo para Entrega">Listo para Entrega</option>
+                </select>
+              )}
             </div>
             <button onClick={() => setIsModalOpen(true)} className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm transition-colors">+ Nuevo Pedido</button>
           </div>
@@ -300,60 +330,74 @@ function App() {
                   <th className="p-4 border-b font-semibold text-center">Estado</th>
                   <th className="p-4 border-b font-semibold text-center">Anticipo</th>
                   <th className="p-4 border-b font-semibold text-center">Saldo</th>
-                  <th className="p-4 border-b font-semibold text-center">Acciones</th> {/* NUEVA */}
+                  {vistaActiva === 'panel' && <th className="p-4 border-b font-semibold text-center">Acciones</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {pedidosFiltrados.length > 0 ? (
-                  pedidosFiltrados.map((pedido) => (
-                    <tr key={pedido.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-medium text-gray-800 flex items-center justify-between">
-                        {pedido.cliente}
-                        <button 
-                          onClick={() => setPedidoViendoDetalles(pedido)}
-                          className="ml-2 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-md transition-colors"
-                          title="Ver Detalles"
-                        >
-                        👁️
-                        </button>
-                      </td>
-                      <td className="p-4 text-gray-600">{pedido.celular}</td>
-                      <td className="p-4 text-center">
-                        <select value={pedido.estado} onChange={(e) => handleInlineUpdate(pedido.id, 'estado', e.target.value)} className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer outline-none appearance-none text-center ${getEstadoColor(pedido.estado)}`}>
-                          <option value="Pendiente">Pendiente</option>
-                          <option value="En Proceso">En Proceso</option>
-                          <option value="Listo para Entrega">Listo para Entrega</option>
-                          {/*<option value="Cancelado">Cancelado</option>*/}
-                        </select>
-                      </td>
-                      <td className="p-4 text-center font-semibold text-gray-800 relative">
-                        <div className="flex items-center justify-center gap-1">
-                          <input type="number" value={pedido.anticipo} onChange={(e) => setPedidos(pedidos.map(p => p.id === pedido.id ? { ...p, anticipo: e.target.value } : p))} onBlur={(e) => handleInlineUpdate(pedido.id, 'anticipo', e.target.value)} className="w-16 text-center bg-transparent hover:bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-400 rounded outline-none transition-all" />
-                          <span className="text-sm">Bs</span>
-                          {campoGuardado === `${pedido.id}-anticipo` && <span className="text-green-500 absolute right-2 font-bold z-10">✓</span>}
-                        </div>
-                      </td>
-                      <td className="p-4 text-center font-semibold text-gray-800 relative">
-                        <div className="flex items-center justify-center gap-1">
-                          <input type="number" value={pedido.saldo} onChange={(e) => setPedidos(pedidos.map(p => p.id === pedido.id ? { ...p, saldo: e.target.value } : p))} onBlur={(e) => handleInlineUpdate(pedido.id, 'saldo', e.target.value)} className="w-16 text-center bg-transparent hover:bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-400 rounded outline-none transition-all" />
-                          <span className="text-sm">Bs</span>
-                          {campoGuardado === `${pedido.id}-saldo` && <span className="text-green-500 absolute right-2 font-bold z-10">✓</span>}
-                        </div>
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex justify-center gap-2">
-                          <button onClick={() => setModalConfirmacion({ isOpen: true, pedido: pedido, accion: 'Entregar' })} className="bg-green-100 text-green-700 hover:bg-green-600 hover:text-white px-2 py-1 rounded shadow-sm text-xs font-bold transition-colors" title="Entregar Pedido">
-                            ✓
-                          </button>
-                          <button onClick={() => setModalConfirmacion({ isOpen: true, pedido: pedido, accion: 'Cancelar' })} className="bg-red-100 text-red-700 hover:bg-red-600 hover:text-white px-2 py-1 rounded shadow-sm text-xs font-bold transition-colors" title="Cancelar Pedido">
-                            ✕
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                {vistaActiva === 'panel' ? (
+                  /* --- RENDER DEL PANEL PRINCIPAL --- */
+                  pedidosFiltrados.length > 0 ? (
+                    pedidosFiltrados.map((pedido) => (
+                      <tr key={pedido.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-4 font-medium text-gray-800 flex items-center justify-between">
+                          {pedido.cliente}
+                          <button onClick={() => setPedidoViendoDetalles(pedido)} className="ml-2 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-md transition-colors" title="Ver Detalles">👁️</button>
+                        </td>
+                        <td className="p-4 text-gray-600">{pedido.celular}</td>
+                        <td className="p-4 text-center">
+                          <select value={pedido.estado} onChange={(e) => handleInlineUpdate(pedido.id, 'estado', e.target.value)} className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer outline-none appearance-none text-center ${getEstadoColor(pedido.estado)}`}>
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="En Proceso">En Proceso</option>
+                            <option value="Listo para Entrega">Listo para Entrega</option>
+                          </select>
+                        </td>
+                        <td className="p-4 text-center font-semibold text-gray-800 relative">
+                          <div className="flex items-center justify-center gap-1">
+                            <input type="number" value={pedido.anticipo} onChange={(e) => setPedidos(pedidos.map(p => p.id === pedido.id ? { ...p, anticipo: e.target.value } : p))} onBlur={(e) => handleInlineUpdate(pedido.id, 'anticipo', e.target.value)} className="w-16 text-center bg-transparent hover:bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-400 rounded outline-none transition-all" />
+                            <span className="text-sm">Bs</span>
+                            {campoGuardado === `${pedido.id}-anticipo` && <span className="text-green-500 absolute right-2 font-bold z-10">✓</span>}
+                          </div>
+                        </td>
+                        <td className="p-4 text-center font-semibold text-gray-800 relative">
+                          <div className="flex items-center justify-center gap-1">
+                            <input type="number" value={pedido.saldo} onChange={(e) => setPedidos(pedidos.map(p => p.id === pedido.id ? { ...p, saldo: e.target.value } : p))} onBlur={(e) => handleInlineUpdate(pedido.id, 'saldo', e.target.value)} className="w-16 text-center bg-transparent hover:bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-400 rounded outline-none transition-all" />
+                            <span className="text-sm">Bs</span>
+                            {campoGuardado === `${pedido.id}-saldo` && <span className="text-green-500 absolute right-2 font-bold z-10">✓</span>}
+                          </div>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex justify-center gap-2">
+                            <button onClick={() => setModalConfirmacion({ isOpen: true, pedido: pedido, accion: 'Entregar' })} className="bg-green-100 text-green-700 hover:bg-green-600 hover:text-white px-2 py-1 rounded shadow-sm text-xs font-bold transition-colors" title="Entregar Pedido">✓</button>
+                            <button onClick={() => setModalConfirmacion({ isOpen: true, pedido: pedido, accion: 'Cancelar' })} className="bg-red-100 text-red-700 hover:bg-red-600 hover:text-white px-2 py-1 rounded shadow-sm text-xs font-bold transition-colors" title="Cancelar Pedido">✕</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan="6" className="p-8 text-center text-gray-400 italic">No hay pedidos registrados en el panel principal.</td></tr>
+                  )
                 ) : (
-                  <tr><td colSpan="6" className="p-8 text-center text-gray-400 italic">No hay pedidos registrados.</td></tr>
+                  /* --- RENDER DEL HISTORIAL (Solo Lectura) --- */
+                  pedidosHistorial.length > 0 ? (
+                    pedidosHistorial.map((pedido) => (
+                      <tr key={pedido.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-4 font-medium text-gray-800 flex items-center justify-between">
+                          {pedido.cliente}
+                          <button onClick={() => setPedidoViendoDetalles(pedido)} className="ml-2 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-md transition-colors" title="Ver Detalles">👁️</button>
+                        </td>
+                        <td className="p-4 text-gray-600">{pedido.celular}</td>
+                        <td className="p-4 text-center">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getEstadoColor(pedido.estado)}`}>
+                            {pedido.estado}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center font-semibold text-gray-600">{pedido.anticipo} Bs</td>
+                        <td className="p-4 text-center font-semibold text-gray-600">{pedido.saldo} Bs</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan="5" className="p-8 text-center text-gray-400 italic">El historial está vacío. Aún no hay pedidos entregados o cancelados.</td></tr>
+                  )
                 )}
               </tbody>
             </table>
