@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import DetallesModal from './components/DetallesModal'; // Añade esta línea
+import ConfirmacionModal from './components/ConfirmacionModal'; // Añade esta línea
 
 function App() {
   // --- ESTADOS DE AUTENTICACIÓN ---
@@ -23,6 +24,11 @@ function App() {
   const [chipsActivos, setChipsActivos] = useState([]);
   const [panokaActivo, setPanokaActivo] = useState(null);
   const [pedidoViendoDetalles, setPedidoViendoDetalles] = useState(null);
+  const [modalConfirmacion, setModalConfirmacion] = useState({
+    isOpen: false,
+    pedido: null,
+    accion: '' // Guardará 'Entregar' o 'Cancelar'
+  });
   
   // Nuevos estados para el Buscador de Historial
   const [busquedaHistorial, setBusquedaHistorial] = useState('');
@@ -160,6 +166,12 @@ function App() {
     if (!error) setTimeout(() => setCampoGuardado(null), 2000);
   };
 
+  const ejecutarAccionFinal = async () => {
+    const nuevoEstado = modalConfirmacion.accion === 'Entregar' ? 'Entregado' : 'Cancelado';
+    await handleInlineUpdate(modalConfirmacion.pedido.id, 'estado', nuevoEstado);
+    setModalConfirmacion({ isOpen: false, pedido: null, accion: '' });
+  };
+
   // --- FUNCIONES DE INTERFAZ ---
   const getEstadoColor = (estado) => {
     switch (estado) {
@@ -182,6 +194,9 @@ function App() {
   };
 
   const pedidosFiltrados = pedidos.filter(pedido => {
+    // MAGIA: Si está entregado o cancelado, desaparece del panel principal
+    if (pedido.estado === 'Entregado' || pedido.estado === 'Cancelado') return false;
+
     const coincideBusqueda = pedido.cliente.toLowerCase().includes(busqueda.toLowerCase()) || (pedido.celular && pedido.celular.includes(busqueda));
     const coincideEstado = filtroEstado === 'Todos los estados' || pedido.estado === filtroEstado;
     return coincideBusqueda && coincideEstado;
@@ -285,6 +300,7 @@ function App() {
                   <th className="p-4 border-b font-semibold text-center">Estado</th>
                   <th className="p-4 border-b font-semibold text-center">Anticipo</th>
                   <th className="p-4 border-b font-semibold text-center">Saldo</th>
+                  <th className="p-4 border-b font-semibold text-center">Acciones</th> {/* NUEVA */}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -307,7 +323,7 @@ function App() {
                           <option value="Pendiente">Pendiente</option>
                           <option value="En Proceso">En Proceso</option>
                           <option value="Listo para Entrega">Listo para Entrega</option>
-                          <option value="Cancelado">Cancelado</option>
+                          {/*<option value="Cancelado">Cancelado</option>*/}
                         </select>
                       </td>
                       <td className="p-4 text-center font-semibold text-gray-800 relative">
@@ -324,10 +340,20 @@ function App() {
                           {campoGuardado === `${pedido.id}-saldo` && <span className="text-green-500 absolute right-2 font-bold z-10">✓</span>}
                         </div>
                       </td>
+                      <td className="p-4 text-center">
+                        <div className="flex justify-center gap-2">
+                          <button onClick={() => setModalConfirmacion({ isOpen: true, pedido: pedido, accion: 'Entregar' })} className="bg-green-100 text-green-700 hover:bg-green-600 hover:text-white px-2 py-1 rounded shadow-sm text-xs font-bold transition-colors" title="Entregar Pedido">
+                            ✓
+                          </button>
+                          <button onClick={() => setModalConfirmacion({ isOpen: true, pedido: pedido, accion: 'Cancelar' })} className="bg-red-100 text-red-700 hover:bg-red-600 hover:text-white px-2 py-1 rounded shadow-sm text-xs font-bold transition-colors" title="Cancelar Pedido">
+                            ✕
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 ) : (
-                  <tr><td colSpan="5" className="p-8 text-center text-gray-400 italic">No hay pedidos registrados.</td></tr>
+                  <tr><td colSpan="6" className="p-8 text-center text-gray-400 italic">No hay pedidos registrados.</td></tr>
                 )}
               </tbody>
             </table>
@@ -435,13 +461,25 @@ function App() {
           </form>
         </div>
       )}
-      {/* === INYECTA EL MODAL DE DETALLES AQUÍ === */}
+        {/* === INYECTA EL MODAL DE DETALLES AQUÍ === */}
         {pedidoViendoDetalles && (
           <DetallesModal 
             pedido={pedidoViendoDetalles} 
             onClose={() => setPedidoViendoDetalles(null)} 
           />
         )}
+        
+        {/* MODAL DE CONFIRMACIÓN DE ACCIONES */}
+      <ConfirmacionModal 
+        isOpen={modalConfirmacion.isOpen}
+        onClose={() => setModalConfirmacion({ isOpen: false, pedido: null, accion: '' })}
+        onConfirm={ejecutarAccionFinal}
+        titulo={modalConfirmacion.accion === 'Entregar' ? 'Confirmar Entrega' : 'Cancelar Pedido'}
+        mensaje={modalConfirmacion.accion === 'Entregar' 
+          ? `¿Estás seguro de marcar el pedido de ${modalConfirmacion.pedido?.cliente} como ENTREGADO?` 
+          : `¿Estás seguro de CANCELAR el pedido de ${modalConfirmacion.pedido?.cliente}?`}
+        colorBoton={modalConfirmacion.accion === 'Entregar' ? 'verde' : 'rojo'}
+      />
         {/* ======================================== */}
     </div>
   );
