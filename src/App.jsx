@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
+import DetallesModal from './components/DetallesModal'; // Añade esta línea
 
 function App() {
   // --- ESTADOS DE AUTENTICACIÓN ---
@@ -21,6 +22,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [chipsActivos, setChipsActivos] = useState([]);
   const [panokaActivo, setPanokaActivo] = useState(null);
+  const [pedidoViendoDetalles, setPedidoViendoDetalles] = useState(null);
   
   // Nuevos estados para el Buscador de Historial
   const [busquedaHistorial, setBusquedaHistorial] = useState('');
@@ -29,7 +31,7 @@ function App() {
   const hoy = new Date().toISOString().split('T')[0];
 
   const estadoInicialForm = {
-    cliente: '', celular: '', fecha_pedido: hoy, fecha_entrega: '', estado: 'Pendiente',
+    cliente: '', celular: '', fecha_pedido: hoy, fecha_entrega: '', estado: 'En Proceso',
     anticipo: 0, saldo: 0, observaciones: '', espalda: '', manga: '', abdomen: '', busto: '',
     l_espalda_1a: '', l_espalda_sg: '', l_espalda_kp: '', l_espalda_4: '', l_espalda_3b: '', l_espalda_gr: '',
     cintura: '', l_pantalon: '', e_pierna: '', cadera: '', muslo: '', botapie: '', rodilla: ''
@@ -289,7 +291,16 @@ function App() {
                 {pedidosFiltrados.length > 0 ? (
                   pedidosFiltrados.map((pedido) => (
                     <tr key={pedido.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-medium text-gray-800">{pedido.cliente}</td>
+                      <td className="p-4 font-medium text-gray-800 flex items-center justify-between">
+                        {pedido.cliente}
+                        <button 
+                          onClick={() => setPedidoViendoDetalles(pedido)}
+                          className="ml-2 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-md transition-colors"
+                          title="Ver Detalles"
+                        >
+                        👁️
+                        </button>
+                      </td>
                       <td className="p-4 text-gray-600">{pedido.celular}</td>
                       <td className="p-4 text-center">
                         <select value={pedido.estado} onChange={(e) => handleInlineUpdate(pedido.id, 'estado', e.target.value)} className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer outline-none appearance-none text-center ${getEstadoColor(pedido.estado)}`}>
@@ -424,6 +435,14 @@ function App() {
           </form>
         </div>
       )}
+      {/* === INYECTA EL MODAL DE DETALLES AQUÍ === */}
+        {pedidoViendoDetalles && (
+          <DetallesModal 
+            pedido={pedidoViendoDetalles} 
+            onClose={() => setPedidoViendoDetalles(null)} 
+          />
+        )}
+        {/* ======================================== */}
     </div>
   );
 }
