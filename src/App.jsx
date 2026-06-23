@@ -31,6 +31,13 @@ function App() {
     accion: '' // Guardará 'Entregar' o 'Cancelar'
   });
   
+// --- ESTADOS DE PAGINACIÓN DEL HISTORIAL ---
+  const [pedidosHistorial, setPedidosHistorial] = useState([]);
+  const [paginaHistorial, setPaginaHistorial] = useState(0);
+  const [hayMasHistorial, setHayMasHistorial] = useState(true);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const ITEMS_POR_PAGINA = 10;
+
   // Nuevos estados para el Buscador de Historial
   const [busquedaHistorial, setBusquedaHistorial] = useState('');
   const [sugerencias, setSugerencias] = useState([]);
@@ -64,14 +71,57 @@ function App() {
 
   // --- LÓGICA DE BASE DE DATOS ---
   useEffect(() => {
-    if (session) fetchPedidos();
+    if (session) {
+      fetchPedidosActivos();
+      fetchHistorialPaginado(0, true);
+    }
   }, [session]);
 
-  const fetchPedidos = async () => {
-    const { data, error } = await supabase.from('pedidos').select('*').order('id', { ascending: false });
-    if (error) console.error("Error trayendo datos:", error);
+  // Trae SOLO los pedidos activos para el Panel Principal
+  const fetchPedidosActivos = async () => {
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select('*')
+      .not('estado', 'in', '("Entregado","Cancelado")') // Excluye los terminados
+      .order('id', { ascending: false });
+      
+    if (error) console.error("Error trayendo activos:", error);
     else setPedidos(data);
   };
+
+  // Trae los pedidos cerrados por bloques (Paginación)
+  const fetchHistorialPaginado = async (paginaActual, resetear = false) => {
+    setCargandoHistorial(true);
+    const desde = paginaActual * ITEMS_POR_PAGINA;
+    const hasta = desde + ITEMS_POR_PAGINA - 1;
+
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select('*')
+      .in('estado', ['Entregado', 'Cancelado'])
+      .order('id', { ascending: false })
+      .range(desde, hasta);
+
+    if (!error && data) {
+      if (resetear) {
+        setPedidosHistorial(data);
+      } else {
+        // Añade los nuevos 10 a los que ya estaban en pantalla
+        setPedidosHistorial(prev => [...prev, ...data]);
+      }
+      // Si trajo menos de 10, significa que ya no hay más en la base de datos
+      setHayMasHistorial(data.length === ITEMS_POR_PAGINA);
+    }
+    setCargandoHistorial(false);
+  };
+
+  // Reemplazamos el useEffect original para que llame a ambas
+  useEffect(() => {
+    if (session) {
+      fetchPedidosActivos();
+      fetchHistorialPaginado(0, true);
+    }
+  }, [session]);
 
   const handleChange = (e) => setForm({ ...form, [name]: e.target.value });
   // Corrección para que tome el name dinámico
@@ -193,7 +243,7 @@ function App() {
       setPanokaActivo(null);
       setBusquedaHistorial('');
       setSugerencias([]);
-      fetchPedidos();
+      fetchPedidosActivos();
       setVistaActiva('panel');
     }
   };
@@ -241,20 +291,15 @@ function App() {
     else setPanokaActivo(tipo);
   };
 
+  // El Panel Principal ya solo tiene activos, solo aplicamos el buscador y el select
   const pedidosFiltrados = pedidos.filter(pedido => {
-    // MAGIA: Si está entregado o cancelado, desaparece del panel principal
-    if (pedido.estado === 'Entregado' || pedido.estado === 'Cancelado') return false;
-
     const coincideBusqueda = pedido.cliente.toLowerCase().includes(busqueda.toLowerCase()) || (pedido.celular && pedido.celular.includes(busqueda));
     const coincideEstado = filtroEstado === 'Todos los estados' || pedido.estado === filtroEstado;
     return coincideBusqueda && coincideEstado;
   });
 
-  const pedidosHistorial = pedidos.filter(pedido => {
-    // MAGIA INVERSA: Solo muestra los entregados o cancelados
-    if (pedido.estado !== 'Entregado' && pedido.estado !== 'Cancelado') return false;
-
-    // Mantenemos el buscador funcional también en el historial
+  // El Historial ya solo tiene entregados/cancelados, solo aplicamos el buscador
+  const pedidosHistorialFiltrados = pedidosHistorial.filter(pedido => {
     const coincideBusqueda = pedido.cliente.toLowerCase().includes(busqueda.toLowerCase()) || (pedido.celular && pedido.celular.includes(busqueda));
     return coincideBusqueda;
   });
@@ -313,13 +358,21 @@ function App() {
           </div>
           <nav className="p-4 space-y-2">
             <button 
-              onClick={() => { setVistaActiva('panel'); setMenuAbierto(false); }} 
+              onClick={() => { 
+                setVistaActiva('panel'); 
+                setMenuAbierto(false); 
+              }} 
               className={`w-full text-left px-4 py-3 rounded-lg font-medium shadow-md transition-colors ${vistaActiva === 'panel' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
             >
               Panel Principal
             </button>
             <button 
-              onClick={() => { setVistaActiva('historial'); setMenuAbierto(false); }} 
+              onClick={() => { 
+                setVistaActiva('historial'); 
+                setPaginaHistorial(0);              // <-- Reiniciamos la página a 0
+                fetchHistorialPaginado(0, true);    // <-- Forzamos una recarga limpia de solo 10
+                setMenuAbierto(false); 
+              }} 
               className={`w-full text-left px-4 py-3 rounded-lg font-medium shadow-md transition-colors ${vistaActiva === 'historial' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
             >
               Historial de Pedidos
@@ -424,7 +477,7 @@ function App() {
                   )
                 ) : (
                   /* --- RENDER DEL HISTORIAL (Solo Lectura) --- */
-                  pedidosHistorial.length > 0 ? (
+                  pedidosHistorialFiltrados.length > 0 ? (
                     pedidosHistorial.map((pedido) => (
                       <tr key={pedido.id} className="hover:bg-gray-50 transition-colors">
                         <td className="p-4 font-medium text-gray-800 flex items-center justify-between">
@@ -447,6 +500,21 @@ function App() {
                 )}
               </tbody>
             </table>
+            {vistaActiva === 'historial' && hayMasHistorial && busqueda === '' && (
+            <div className="flex justify-center mt-6 mb-4">
+              <button 
+                onClick={() => {
+                  const siguientePagina = paginaHistorial + 1;
+                  setPaginaHistorial(siguientePagina);
+                  fetchHistorialPaginado(siguientePagina);
+                }}
+                disabled={cargandoHistorial}
+                className="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium shadow-sm transition-colors disabled:opacity-50"
+              >
+                {cargandoHistorial ? 'Cargando registros...' : 'Cargar más pedidos anteriores'}
+              </button>
+            </div>
+          )}
           </div>
         </div>
       </main>
