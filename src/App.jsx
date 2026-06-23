@@ -224,6 +224,13 @@ function App() {
     if (panokaActivo) detallesFinales.push(`Panoka (${panokaActivo})`);
 
     const nuevoPedido = { ...form, detalles: detallesFinales };
+
+    // --- NUEVO: Sanitización de fechas ---
+    // Si el sastre dejó la fecha en blanco, la convertimos en 'null' para que Supabase no colapse.
+    if (nuevoPedido.fecha_entrega === '') nuevoPedido.fecha_entrega = null;
+    if (nuevoPedido.fecha_pedido === '') nuevoPedido.fecha_pedido = null;
+    // --------------------------------------
+
     const { error } = await supabase.from('pedidos').insert([nuevoPedido]);
 
     if (error) {
@@ -250,16 +257,29 @@ function App() {
   };
 
   const handleInlineUpdate = async (id, campo, nuevoValor) => {
-    setPedidos(pedidos.map(p => p.id === id ? { ...p, [campo]: nuevoValor } : p));
+    // 1. Magia visual instantánea: Si se entrega o cancela, lo sacamos de la pantalla
+    if (campo === 'estado' && (nuevoValor === 'Entregado' || nuevoValor === 'Cancelado')) {
+      setPedidos(pedidos.filter(p => p.id !== id));
+    } else {
+      // Si es otro cambio (ej. anticipo o cambiar a 'En Proceso'), solo lo actualizamos
+      setPedidos(pedidos.map(p => p.id === id ? { ...p, [campo]: nuevoValor } : p));
+    }
+
     setCampoGuardado(`${id}-${campo}`);
+
+    // 2. Se actualiza en la nube de fondo silenciosamente
     const { error } = await supabase.from('pedidos').update({ [campo]: nuevoValor }).eq('id', id);
     if (!error) setTimeout(() => setCampoGuardado(null), 2000);
   };
 
   const ejecutarAccionFinal = async () => {
     const nuevoEstado = modalConfirmacion.accion === 'Entregar' ? 'Entregado' : 'Cancelado';
-    await handleInlineUpdate(modalConfirmacion.pedido.id, 'estado', nuevoEstado);
+
+    // 1. Cierra el modal AL INSTANTE para eliminar la sensación de lag
     setModalConfirmacion({ isOpen: false, pedido: null, accion: '' });
+
+    // 2. Ejecuta la actualización de fondo (no esperamos la respuesta para la interfaz)
+    handleInlineUpdate(modalConfirmacion.pedido.id, 'estado', nuevoEstado);
   };
 
   // --- FUNCIONES DE INTERFAZ ---
@@ -434,7 +454,22 @@ function App() {
                           {pedido.cliente}
                           <button onClick={() => setPedidoViendoDetalles(pedido)} className="ml-2 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-md transition-colors" title="Ver Detalles">👁️</button>
                         </td>
-                        <td className="p-4 text-gray-600">{pedido.celular}</td>
+                        <td className="p-4 text-gray-600">
+                          <div className="flex items-center gap-2">
+                            <span>{pedido.celular}</span>
+                            {pedido.celular && (
+                              <a
+                                href={`https://wa.me/591${pedido.celular.trim()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-green-100 text-green-600 hover:bg-green-500 hover:text-white p-1 rounded-md transition-colors"
+                                title="Enviar WhatsApp"
+                              >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 0C5.385 0 0 5.385 0 12.031c0 2.124.552 4.162 1.6 5.969L.053 24l6.195-1.516c1.742.946 3.702 1.446 5.783 1.446 6.646 0 12.031-5.385 12.031-12.031S18.677 0 12.031 0zm0 21.969c-1.815 0-3.588-.477-5.154-1.384l-.369-.215-3.83.938.954-3.738-.231-.385a10.024 10.024 0 0 1-1.554-5.261c0-5.569 4.538-10.108 10.108-10.108 5.569 0 10.108 4.538 10.108 10.108s-4.538 10.108-10.108 10.108zm5.538-7.554c-.308-.154-1.815-.9-2.092-1.015-.277-.108-.477-.154-.692.154-.215.308-.8 1.015-.969 1.231-.169.215-.354.246-.662.092-2.123-.984-3.415-2.815-3.83-3.523-.108-.184.062-.308.2-.446.123-.123.277-.308.415-.462.138-.154.185-.277.277-.462.092-.185.046-.354-.031-.5-.077-.154-.692-1.662-.954-2.277-.246-.6-.508-.523-.692-.538-.169-.015-.369-.015-.569-.015s-.523.077-.8.385c-.277.308-1.077 1.046-1.077 2.554s1.108 2.969 1.262 3.169c.154.2 2.154 3.446 5.323 4.723 1.631.662 2.308.708 3.169.585.554-.077 1.815-.738 2.077-1.462.262-.723.262-1.338.185-1.462-.077-.123-.277-.2-.585-.354z" /></svg>
+                              </a>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-4 text-center">
                           <select value={pedido.estado} onChange={(e) => handleInlineUpdate(pedido.id, 'estado', e.target.value)} className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer outline-none appearance-none text-center ${getEstadoColor(pedido.estado)}`}>
                             <option value="Pendiente">Pendiente</option>
@@ -476,7 +511,22 @@ function App() {
                           {pedido.cliente}
                           <button onClick={() => setPedidoViendoDetalles(pedido)} className="ml-2 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-md transition-colors" title="Ver Detalles">👁️</button>
                         </td>
-                        <td className="p-4 text-gray-600">{pedido.celular}</td>
+                        <td className="p-4 text-gray-600">
+                          <div className="flex items-center gap-2">
+                            <span>{pedido.celular}</span>
+                            {pedido.celular && (
+                              <a
+                                href={`https://wa.me/591${pedido.celular.trim()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-green-100 text-green-600 hover:bg-green-500 hover:text-white p-1 rounded-md transition-colors"
+                                title="Enviar WhatsApp"
+                              >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 0C5.385 0 0 5.385 0 12.031c0 2.124.552 4.162 1.6 5.969L.053 24l6.195-1.516c1.742.946 3.702 1.446 5.783 1.446 6.646 0 12.031-5.385 12.031-12.031S18.677 0 12.031 0zm0 21.969c-1.815 0-3.588-.477-5.154-1.384l-.369-.215-3.83.938.954-3.738-.231-.385a10.024 10.024 0 0 1-1.554-5.261c0-5.569 4.538-10.108 10.108-10.108 5.569 0 10.108 4.538 10.108 10.108s-4.538 10.108-10.108 10.108zm5.538-7.554c-.308-.154-1.815-.9-2.092-1.015-.277-.108-.477-.154-.692.154-.215.308-.8 1.015-.969 1.231-.169.215-.354.246-.662.092-2.123-.984-3.415-2.815-3.83-3.523-.108-.184.062-.308.2-.446.123-.123.277-.308.415-.462.138-.154.185-.277.277-.462.092-.185.046-.354-.031-.5-.077-.154-.692-1.662-.954-2.277-.246-.6-.508-.523-.692-.538-.169-.015-.369-.015-.569-.015s-.523.077-.8.385c-.277.308-1.077 1.046-1.077 2.554s1.108 2.969 1.262 3.169c.154.2 2.154 3.446 5.323 4.723 1.631.662 2.308.708 3.169.585.554-.077 1.815-.738 2.077-1.462.262-.723.262-1.338.185-1.462-.077-.123-.277-.2-.585-.354z" /></svg>
+                              </a>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-4 text-center">
                           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getEstadoColor(pedido.estado)}`}>
                             {pedido.estado}
