@@ -30,8 +30,8 @@ function App() {
     pedido: null,
     accion: '' // Guardará 'Entregar' o 'Cancelar'
   });
-  
-// --- ESTADOS DE PAGINACIÓN DEL HISTORIAL ---
+
+  // --- ESTADOS DE PAGINACIÓN DEL HISTORIAL ---
   const [pedidosHistorial, setPedidosHistorial] = useState([]);
   const [paginaHistorial, setPaginaHistorial] = useState(0);
   const [hayMasHistorial, setHayMasHistorial] = useState(true);
@@ -84,7 +84,7 @@ function App() {
       .select('*')
       .not('estado', 'in', '("Entregado","Cancelado")') // Excluye los terminados
       .order('id', { ascending: false });
-      
+
     if (error) console.error("Error trayendo activos:", error);
     else setPedidos(data);
   };
@@ -115,15 +115,7 @@ function App() {
     setCargandoHistorial(false);
   };
 
-  // Reemplazamos el useEffect original para que llame a ambas
-  useEffect(() => {
-    if (session) {
-      fetchPedidosActivos();
-      fetchHistorialPaginado(0, true);
-    }
-  }, [session]);
 
-  const handleChange = (e) => setForm({ ...form, [name]: e.target.value });
   // Corrección para que tome el name dinámico
   const handleChangeCorrecto = (e) => {
     const { name, value } = e.target;
@@ -134,7 +126,7 @@ function App() {
   const handleBuscarHistorial = async (e) => {
     const texto = e.target.value;
     setBusquedaHistorial(texto);
-    
+
     if (texto.trim().length > 1) {
       // Buscamos directamente en la nueva tabla 'clientes' en Supabase
       const { data, error } = await supabase
@@ -153,12 +145,12 @@ function App() {
 
   const seleccionarCliente = async (clienteSeleccionado) => {
     // 1. Rellenamos el Nombre y Celular al instante desde la tabla 'clientes'
-    setForm(prev => ({ 
-      ...prev, 
-      cliente: clienteSeleccionado.nombre, 
-      celular: clienteSeleccionado.celular || '' 
+    setForm(prev => ({
+      ...prev,
+      cliente: clienteSeleccionado.nombre,
+      celular: clienteSeleccionado.celular || ''
     }));
-    
+
     // Limpiamos el buscador visualmente
     setSugerencias([]);
     setBusquedaHistorial('');
@@ -345,7 +337,7 @@ function App() {
   // ==========================================
   return (
     <div className="flex h-screen bg-gray-100 font-sans relative overflow-hidden">
-      
+
       {menuAbierto && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden" onClick={() => setMenuAbierto(false)}></div>
       )}
@@ -357,35 +349,35 @@ function App() {
             <button className="md:hidden text-gray-400 hover:text-white" onClick={() => setMenuAbierto(false)}>✕</button>
           </div>
           <nav className="p-4 space-y-2">
-            <button 
-              onClick={() => { 
-                setVistaActiva('panel'); 
-                setMenuAbierto(false); 
-              }} 
+            <button
+              onClick={() => {
+                setVistaActiva('panel');
+                setMenuAbierto(false);
+              }}
               className={`w-full text-left px-4 py-3 rounded-lg font-medium shadow-md transition-colors ${vistaActiva === 'panel' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
             >
               Panel Principal
             </button>
-            <button 
-              onClick={() => { 
-                setVistaActiva('historial'); 
+            <button
+              onClick={() => {
+                setVistaActiva('historial');
                 setPaginaHistorial(0);              // <-- Reiniciamos la página a 0
                 fetchHistorialPaginado(0, true);    // <-- Forzamos una recarga limpia de solo 10
-                setMenuAbierto(false); 
-              }} 
+                setMenuAbierto(false);
+              }}
               className={`w-full text-left px-4 py-3 rounded-lg font-medium shadow-md transition-colors ${vistaActiva === 'historial' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
             >
               Historial de Pedidos
             </button>
-            <button 
-              onClick={() => { setIsModalOpen(true); setMenuAbierto(false); }} 
+            <button
+              onClick={() => { setIsModalOpen(true); setMenuAbierto(false); }}
               className="w-full text-left px-4 py-3 hover:bg-gray-800 text-gray-300 rounded-lg font-medium transition-colors"
             >
               + Nuevo Pedido
             </button>
           </nav>
         </div>
-        
+
         <div className="p-4 border-t border-gray-700 mt-auto">
           <p className="text-xs text-gray-400 mb-2 px-2 truncate">{session.user.email}</p>
           <button onClick={handleLogout} className="w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white text-gray-300 rounded-lg font-medium transition-colors flex items-center gap-2">
@@ -478,7 +470,7 @@ function App() {
                 ) : (
                   /* --- RENDER DEL HISTORIAL (Solo Lectura) --- */
                   pedidosHistorialFiltrados.length > 0 ? (
-                    pedidosHistorial.map((pedido) => (
+                    pedidosHistorialFiltrados.map((pedido) => (
                       <tr key={pedido.id} className="hover:bg-gray-50 transition-colors">
                         <td className="p-4 font-medium text-gray-800 flex items-center justify-between">
                           {pedido.cliente}
@@ -501,20 +493,20 @@ function App() {
               </tbody>
             </table>
             {vistaActiva === 'historial' && hayMasHistorial && busqueda === '' && (
-            <div className="flex justify-center mt-6 mb-4">
-              <button 
-                onClick={() => {
-                  const siguientePagina = paginaHistorial + 1;
-                  setPaginaHistorial(siguientePagina);
-                  fetchHistorialPaginado(siguientePagina);
-                }}
-                disabled={cargandoHistorial}
-                className="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium shadow-sm transition-colors disabled:opacity-50"
-              >
-                {cargandoHistorial ? 'Cargando registros...' : 'Cargar más pedidos anteriores'}
-              </button>
-            </div>
-          )}
+              <div className="flex justify-center mt-6 mb-4">
+                <button
+                  onClick={() => {
+                    const siguientePagina = paginaHistorial + 1;
+                    setPaginaHistorial(siguientePagina);
+                    fetchHistorialPaginado(siguientePagina);
+                  }}
+                  disabled={cargandoHistorial}
+                  className="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium shadow-sm transition-colors disabled:opacity-50"
+                >
+                  {cargandoHistorial ? 'Cargando registros...' : 'Cargar más pedidos anteriores'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -531,22 +523,22 @@ function App() {
               <label className="block text-sm font-semibold text-blue-800 mb-2">¿Es un cliente antiguo? Carga sus medidas:</label>
               <div className="flex items-center gap-2">
                 <span className="text-xl">🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Ej. Escribe el nombre del cliente..." 
-                  value={busquedaHistorial} 
-                  onChange={handleBuscarHistorial} 
-                  className="w-full px-4 py-2 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                <input
+                  type="text"
+                  placeholder="Ej. Escribe el nombre del cliente..."
+                  value={busquedaHistorial}
+                  onChange={handleBuscarHistorial}
+                  className="w-full px-4 py-2 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
-              
+
               {/* Lista de sugerencias */}
               {sugerencias.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto z-50">
                   {sugerencias.map(s => (
-                    <div 
-                      key={s.id} 
-                      onClick={() => seleccionarCliente(s)} 
+                    <div
+                      key={s.id}
+                      onClick={() => seleccionarCliente(s)}
                       className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors"
                     >
                       <div className="font-bold text-gray-800">{s.nombre}</div>
@@ -605,15 +597,15 @@ function App() {
                 <button type="button" onClick={() => handlePanoka('2 piezas')} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${panokaActivo === '2 piezas' ? 'bg-indigo-600 text-white shadow-md' : 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200'}`}>Panoka (2 Piezas)</button>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-100">
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Anticipo (Bs)</label><input type="number" name="anticipo" value={form.anticipo} onChange={handleChangeCorrecto} className="w-full px-3 py-2 border rounded focus:outline-none" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Saldo (Bs)</label><input type="number" name="saldo" value={form.saldo} onChange={handleChangeCorrecto} className="w-full px-3 py-2 border rounded focus:outline-none" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Estado</label><select name="estado" value={form.estado} onChange={handleChangeCorrecto} className="w-full px-3 py-2 border rounded focus:outline-none bg-white"><option value="Pendiente">Pendiente</option><option value="En Proceso">En Proceso</option><option value="Listo para Entrega">Listo para Entrega</option><option value="Cancelado">Cancelado</option></select></div>
             </div>
-            
+
             <div className="mb-6"><label className="block text-sm font-medium text-gray-700 mb-1">Observaciones (OBS)</label><textarea name="observaciones" value={form.observaciones} onChange={handleChangeCorrecto} rows="3" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"></textarea></div>
-            
+
             <div className="flex flex-col-reverse md:flex-row justify-end gap-4 border-t pt-4">
               <button type="button" onClick={cerrarModalNuevoPedido} className="w-full md:w-auto px-6 py-3 md:py-2 border rounded-lg text-gray-700 hover:bg-gray-100 font-medium transition-colors">Cancelar</button>
               <button type="submit" className="w-full md:w-auto px-6 py-3 md:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-md transition-colors">Guardar Pedido</button>
@@ -621,26 +613,26 @@ function App() {
           </form>
         </div>
       )}
-        {/* === INYECTA EL MODAL DE DETALLES AQUÍ === */}
-        {pedidoViendoDetalles && (
-          <DetallesModal 
-            pedido={pedidoViendoDetalles} 
-            onClose={() => setPedidoViendoDetalles(null)} 
-          />
-        )}
-        
-        {/* MODAL DE CONFIRMACIÓN DE ACCIONES */}
-      <ConfirmacionModal 
+      {/* === INYECTA EL MODAL DE DETALLES AQUÍ === */}
+      {pedidoViendoDetalles && (
+        <DetallesModal
+          pedido={pedidoViendoDetalles}
+          onClose={() => setPedidoViendoDetalles(null)}
+        />
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN DE ACCIONES */}
+      <ConfirmacionModal
         isOpen={modalConfirmacion.isOpen}
         onClose={() => setModalConfirmacion({ isOpen: false, pedido: null, accion: '' })}
         onConfirm={ejecutarAccionFinal}
         titulo={modalConfirmacion.accion === 'Entregar' ? 'Confirmar Entrega' : 'Cancelar Pedido'}
-        mensaje={modalConfirmacion.accion === 'Entregar' 
-          ? `¿Estás seguro de marcar el pedido de ${modalConfirmacion.pedido?.cliente} como ENTREGADO?` 
+        mensaje={modalConfirmacion.accion === 'Entregar'
+          ? `¿Estás seguro de marcar el pedido de ${modalConfirmacion.pedido?.cliente} como ENTREGADO?`
           : `¿Estás seguro de CANCELAR el pedido de ${modalConfirmacion.pedido?.cliente}?`}
         colorBoton={modalConfirmacion.accion === 'Entregar' ? 'verde' : 'rojo'}
       />
-        {/* ======================================== */}
+      {/* ======================================== */}
     </div>
   );
 }
