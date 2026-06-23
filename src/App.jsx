@@ -81,65 +81,102 @@ function App() {
   };
 
   // --- FUNCIONES DEL CLONADOR DE HISTORIAL ---
-  const handleBuscarHistorial = (e) => {
+  const handleBuscarHistorial = async (e) => {
     const texto = e.target.value;
     setBusquedaHistorial(texto);
     
     if (texto.trim().length > 1) {
-      // Filtramos en memoria buscando coincidencias
-      const filtrados = pedidos.filter(p => p.cliente.toLowerCase().includes(texto.toLowerCase()));
-      // Mostramos máximo 5 sugerencias para no saturar la pantalla
-      setSugerencias(filtrados.slice(0, 5));
+      // Buscamos directamente en la nueva tabla 'clientes' en Supabase
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('*')
+        .ilike('nombre', `%${texto}%`)
+        .limit(5);
+
+      if (!error && data) {
+        setSugerencias(data);
+      }
     } else {
       setSugerencias([]);
     }
   };
 
-  const cargarDatosAnteriores = (pedidoViejito) => {
-    setForm({
-      ...estadoInicialForm, // Mantenemos saldos, anticipos y fechas limpias/por defecto
-      cliente: pedidoViejito.cliente,
-      celular: pedidoViejito.celular || '',
-      espalda: pedidoViejito.espalda || '',
-      manga: pedidoViejito.manga || '',
-      abdomen: pedidoViejito.abdomen || '',
-      busto: pedidoViejito.busto || '',
-      l_espalda_1a: pedidoViejito.l_espalda_1a || '',
-      l_espalda_sg: pedidoViejito.l_espalda_sg || '',
-      l_espalda_kp: pedidoViejito.l_espalda_kp || '',
-      l_espalda_4: pedidoViejito.l_espalda_4 || '',
-      l_espalda_3b: pedidoViejito.l_espalda_3b || '',
-      l_espalda_gr: pedidoViejito.l_espalda_gr || '',
-      cintura: pedidoViejito.cintura || '',
-      l_pantalon: pedidoViejito.l_pantalon || '',
-      e_pierna: pedidoViejito.e_pierna || '',
-      cadera: pedidoViejito.cadera || '',
-      muslo: pedidoViejito.muslo || '',
-      botapie: pedidoViejito.botapie || '',
-      rodilla: pedidoViejito.rodilla || ''
-    });
+  const seleccionarCliente = async (clienteSeleccionado) => {
+    // 1. Rellenamos el Nombre y Celular al instante desde la tabla 'clientes'
+    setForm(prev => ({ 
+      ...prev, 
+      cliente: clienteSeleccionado.nombre, 
+      celular: clienteSeleccionado.celular || '' 
+    }));
+    
+    // Limpiamos el buscador visualmente
+    setSugerencias([]);
+    setBusquedaHistorial('');
 
-    // Restauramos también los detalles/chips si los tenía
-    if (pedidoViejito.detalles && Array.isArray(pedidoViejito.detalles)) {
-      const normales = pedidoViejito.detalles.filter(d => !d.startsWith('Panoka'));
-      const panoka = pedidoViejito.detalles.find(d => d.startsWith('Panoka'));
-      setChipsActivos(normales);
-      if (panoka) {
-        const match = panoka.match(/\((.*?)\)/);
-        if (match) setPanokaActivo(match[1]);
-      } else {
-        setPanokaActivo(null);
+    // 2. Buscamos en 'pedidos' las últimas medidas de este cliente
+    const { data: ultimoPedido, error } = await supabase
+      .from('pedidos')
+      .select('*')
+      .eq('cliente', clienteSeleccionado.nombre)
+      .order('created_at', { ascending: false }) // Trae el más reciente primero
+      .limit(1)
+      .single();
+
+    // Si encontramos un pedido anterior, inyectamos sus medidas
+    if (ultimoPedido) {
+      setForm(prev => ({
+        ...prev,
+        espalda: ultimoPedido.espalda || '',
+        manga: ultimoPedido.manga || '',
+        abdomen: ultimoPedido.abdomen || '',
+        busto: ultimoPedido.busto || '',
+        l_espalda_1a: ultimoPedido.l_espalda_1a || '',
+        l_espalda_sg: ultimoPedido.l_espalda_sg || '',
+        l_espalda_kp: ultimoPedido.l_espalda_kp || '',
+        l_espalda_4: ultimoPedido.l_espalda_4 || '',
+        l_espalda_3b: ultimoPedido.l_espalda_3b || '',
+        l_espalda_gr: ultimoPedido.l_espalda_gr || '',
+        cintura: ultimoPedido.cintura || '',
+        l_pantalon: ultimoPedido.l_pantalon || '',
+        e_pierna: ultimoPedido.e_pierna || '',
+        cadera: ultimoPedido.cadera || '',
+        muslo: ultimoPedido.muslo || '',
+        botapie: ultimoPedido.botapie || '',
+        rodilla: ultimoPedido.rodilla || ''
+      }));
+
+      // Restauramos también los detalles/chips si los tenía
+      if (ultimoPedido.detalles && Array.isArray(ultimoPedido.detalles)) {
+        const normales = ultimoPedido.detalles.filter(d => !d.startsWith('Panoka'));
+        const panoka = ultimoPedido.detalles.find(d => d.startsWith('Panoka'));
+        setChipsActivos(normales);
+        if (panoka) {
+          const match = panoka.match(/\((.*?)\)/);
+          if (match) setPanokaActivo(match[1]);
+        } else {
+          setPanokaActivo(null);
+        }
       }
     }
-
-    // Limpiamos el buscador después de cargar
-    setBusquedaHistorial('');
-    setSugerencias([]);
   };
 
   const guardarNuevoPedido = async (e) => {
     e.preventDefault();
     if (!form.cliente.trim()) { alert("El nombre del cliente es obligatorio"); return; }
+
+    // === CREACIÓN SILENCIOSA DE CLIENTE ===
+    const { data: clienteExistente } = await supabase
+      .from('clientes')
+      .select('id')
+      .eq('nombre', form.cliente)
+      .single();
+
+    if (!clienteExistente) {
+      await supabase.from('clientes').insert([{ nombre: form.cliente, celular: form.celular }]);
+    } else if (form.celular) {
+      await supabase.from('clientes').update({ celular: form.celular }).eq('nombre', form.cliente);
+    }
+    // ======================================
 
     let detallesFinales = [...chipsActivos];
     if (panokaActivo) detallesFinales.push(`Panoka (${panokaActivo})`);
@@ -159,6 +196,15 @@ function App() {
       fetchPedidos();
       setVistaActiva('panel');
     }
+  };
+
+  const cerrarModalNuevoPedido = () => {
+    setIsModalOpen(false);
+    setForm(estadoInicialForm); // Resetea todos los campos de texto
+    setChipsActivos([]);        // Limpia los botones de detalles
+    setPanokaActivo(null);      // Limpia el botón de Panoka
+    setBusquedaHistorial('');   // Limpia el buscador
+    setSugerencias([]);         // Limpia la lista desplegable
   };
 
   const handleInlineUpdate = async (id, campo, nuevoValor) => {
@@ -409,7 +455,7 @@ function App() {
       {isModalOpen && (
         <div className="absolute inset-0 bg-black bg-opacity-50 flex justify-center items-start pt-4 md:pt-10 z-50 overflow-y-auto pb-10 px-4">
           <form onSubmit={guardarNuevoPedido} className="bg-white w-full max-w-4xl rounded-xl shadow-2xl p-6 md:p-8 relative">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-2xl font-bold bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center">×</button>
+            <button type="button" onClick={cerrarModalNuevoPedido} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-2xl font-bold bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center">×</button>
             <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-6 border-b pb-4 pr-8">Registrar Nuevo Pedido</h2>
 
             {/* BUSCADOR DE HISTORIAL (CLONADOR) */}
@@ -432,11 +478,13 @@ function App() {
                   {sugerencias.map(s => (
                     <div 
                       key={s.id} 
-                      onClick={() => cargarDatosAnteriores(s)} 
+                      onClick={() => seleccionarCliente(s)} 
                       className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors"
                     >
-                      <div className="font-bold text-gray-800">{s.cliente}</div>
-                      <div className="text-xs text-gray-500">Fecha del pedido anterior: {s.fecha_pedido} {s.celular && `| Cel: ${s.celular}`}</div>
+                      <div className="font-bold text-gray-800">{s.nombre}</div>
+                      <div className="text-xs text-gray-500">
+                        {s.celular ? `Cel: ${s.celular}` : 'Sin celular registrado'}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -499,7 +547,7 @@ function App() {
             <div className="mb-6"><label className="block text-sm font-medium text-gray-700 mb-1">Observaciones (OBS)</label><textarea name="observaciones" value={form.observaciones} onChange={handleChangeCorrecto} rows="3" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"></textarea></div>
             
             <div className="flex flex-col-reverse md:flex-row justify-end gap-4 border-t pt-4">
-              <button type="button" onClick={() => setIsModalOpen(false)} className="w-full md:w-auto px-6 py-3 md:py-2 border rounded-lg text-gray-700 hover:bg-gray-100 font-medium transition-colors">Cancelar</button>
+              <button type="button" onClick={cerrarModalNuevoPedido} className="w-full md:w-auto px-6 py-3 md:py-2 border rounded-lg text-gray-700 hover:bg-gray-100 font-medium transition-colors">Cancelar</button>
               <button type="submit" className="w-full md:w-auto px-6 py-3 md:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-md transition-colors">Guardar Pedido</button>
             </div>
           </form>
