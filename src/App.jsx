@@ -19,6 +19,7 @@ function App() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('Todos los estados');
   const [vistaActiva, setVistaActiva] = useState('panel'); // Puede ser 'panel' o 'historial'
+  const [ordenFecha, setOrdenFecha] = useState('recientes'); // 'asc' = más próximas primero, 'desc' = más lejanas
 
   // --- ESTADOS DEL MODAL Y CLONADOR ---
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -292,7 +293,12 @@ function App() {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
-
+  const formatearFecha = (fechaDB) => {
+    if (!fechaDB) return '';
+    // La base de datos entrega "2026-06-25", lo cortamos y lo volteamos
+    const [anio, mes, dia] = fechaDB.split('-');
+    return `${dia}/${mes}/${anio}`;
+  };
   const toggleChip = (chip) => {
     if (chipsActivos.includes(chip)) setChipsActivos(chipsActivos.filter(c => c !== chip));
     else setChipsActivos([...chipsActivos, chip]);
@@ -304,11 +310,27 @@ function App() {
   };
 
   // El Panel Principal ya solo tiene activos, solo aplicamos el buscador y el select
-  const pedidosFiltrados = pedidos.filter(pedido => {
-    const coincideBusqueda = pedido.cliente.toLowerCase().includes(busqueda.toLowerCase()) || (pedido.celular && pedido.celular.includes(busqueda));
-    const coincideEstado = filtroEstado === 'Todos los estados' || pedido.estado === filtroEstado;
-    return coincideBusqueda && coincideEstado;
-  });
+  const pedidosFiltrados = pedidos
+    .filter(pedido => {
+      const coincideBusqueda = pedido.cliente.toLowerCase().includes(busqueda.toLowerCase()) || (pedido.celular && pedido.celular.includes(busqueda));
+      const coincideEstado = filtroEstado === 'Todos los estados' || pedido.estado === filtroEstado;
+      return coincideBusqueda && coincideEstado;
+    })
+    .sort((a, b) => {
+      // 1. Modo por defecto: Los recién creados van arriba (Ordenados por ID mayor)
+      if (ordenFecha === 'recientes') {
+        return b.id - a.id;
+      }
+
+      // 2. Modos de Fecha: Próximas o Lejanas
+      if (!a.fecha_entrega) return 1;
+      if (!b.fecha_entrega) return -1;
+
+      const fechaA = new Date(a.fecha_entrega);
+      const fechaB = new Date(b.fecha_entrega);
+
+      return ordenFecha === 'asc' ? fechaA - fechaB : fechaB - fechaA;
+    });
 
   // El Historial ya solo tiene entregados/cancelados, solo aplicamos el buscador
   const pedidosHistorialFiltrados = pedidosHistorial.filter(pedido => {
@@ -421,12 +443,23 @@ function App() {
             <div className="w-full max-w-2xl flex flex-col sm:flex-row gap-4">
               <input type="text" placeholder="🔍 Buscar por nombre o celular..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
               {vistaActiva === 'panel' && (
-                <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                  <option value="Todos los estados">Todos los estados</option>
-                  <option value="Pendiente">Pendiente</option>
-                  <option value="En Proceso">En Proceso</option>
-                  <option value="Listo para Entrega">Listo para Entrega</option>
-                </select>
+                <div className="flex w-full sm:w-auto gap-2">
+                  <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                    <option value="Todos los estados">Todos los estados</option>
+                    <option value="Pendiente">Pendiente</option>
+                    <option value="En Proceso">En Proceso</option>
+                    <option value="Listo para Entrega">Listo para Entrega</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => setOrdenFecha(prev => prev === 'recientes' ? 'asc' : prev === 'asc' ? 'desc' : 'recientes')}
+                    className={`px-4 py-2 rounded-lg flex-shrink-0 flex items-center gap-2 transition-colors shadow-sm font-medium border ${ordenFecha === 'recientes' ? 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}
+                    title="Cambiar orden de la tabla"
+                  >
+                    {ordenFecha === 'recientes' ? '🆕 Recientes' : ordenFecha === 'asc' ? '📅 ↓ Próximas' : '📅 ↑ Lejanas'}
+                  </button>
+                </div>
               )}
             </div>
             <button onClick={() => setIsModalOpen(true)} className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm transition-colors">+ Nuevo Pedido</button>
@@ -438,6 +471,7 @@ function App() {
                 <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
                   <th className="p-4 border-b font-semibold">Cliente</th>
                   <th className="p-4 border-b font-semibold">Celular</th>
+                  <th className="p-4 border-b font-semibold text-center">Entrega</th>
                   <th className="p-4 border-b font-semibold text-center">Estado</th>
                   <th className="p-4 border-b font-semibold text-center">Anticipo</th>
                   <th className="p-4 border-b font-semibold text-center">Saldo</th>
@@ -469,6 +503,9 @@ function App() {
                               </a>
                             )}
                           </div>
+                        </td>
+                        <td className="p-4 text-center font-medium text-gray-700">
+                          {pedido.fecha_entrega ? formatearFecha(pedido.fecha_entrega) : <span className="text-gray-400 text-xs italic">Sin fecha</span>}
                         </td>
                         <td className="p-4 text-center">
                           <select value={pedido.estado} onChange={(e) => handleInlineUpdate(pedido.id, 'estado', e.target.value)} className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer outline-none appearance-none text-center ${getEstadoColor(pedido.estado)}`}>
