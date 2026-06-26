@@ -2,7 +2,11 @@ import React from 'react';
 
 function DetallesModal({ pedido, onClose }) {
   if (!pedido) return null;
-
+  const formatearFecha = (fechaDB) => {
+    if (!fechaDB) return 'Sin fecha';
+    const [anio, mes, dia] = fechaDB.split('-');
+    return `${dia}/${mes}/${anio}`;
+  };
   return (
     <div className="absolute inset-0 bg-black bg-opacity-50 flex justify-center items-start pt-10 z-50 overflow-y-auto pb-10 px-4">
       <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl p-8 relative">
@@ -32,11 +36,11 @@ function DetallesModal({ pedido, onClose }) {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-semibold">FECHA PEDIDO</p>
-            <p className="font-bold text-gray-800">{pedido.fecha_pedido || 'N/A'}</p>
+            <p className="font-bold text-gray-800">{formatearFecha(pedido.fecha_pedido)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500 font-semibold">FECHA ENTREGA</p>
-            <p className="font-bold text-gray-800">{pedido.fecha_entrega || 'No definida'}</p>
+            <p className="font-bold text-gray-800">{formatearFecha(pedido.fecha_entrega)}</p>
           </div>
         </div>
 

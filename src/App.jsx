@@ -471,10 +471,16 @@ function App() {
                 <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
                   <th className="p-4 border-b font-semibold">Cliente</th>
                   <th className="p-4 border-b font-semibold">Celular</th>
-                  <th className="p-4 border-b font-semibold text-center">Entrega</th>
+                  {vistaActiva === 'panel' && <th className="p-4 border-b font-semibold text-center">Entrega</th>}
                   <th className="p-4 border-b font-semibold text-center">Estado</th>
-                  <th className="p-4 border-b font-semibold text-center">Anticipo</th>
-                  <th className="p-4 border-b font-semibold text-center">Saldo</th>
+                  {vistaActiva === 'panel' ? (
+                    <>
+                      <th className="p-4 border-b font-semibold text-center text-sm text-gray-500">ANTICIPO</th>
+                      <th className="p-4 border-b font-semibold text-center text-sm text-gray-500">SALDO</th>
+                    </>
+                  ) : (
+                    <th className="p-4 border-b font-semibold text-center text-sm text-gray-500">COSTO TOTAL</th>
+                  )}
                   {vistaActiva === 'panel' && <th className="p-4 border-b font-semibold text-center">Acciones</th>}
                 </tr>
               </thead>
@@ -537,7 +543,7 @@ function App() {
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan="6" className="p-8 text-center text-gray-400 italic">No hay pedidos registrados en el panel principal.</td></tr>
+                    <tr><td colSpan="7" className="p-8 text-center text-gray-400 italic">No hay pedidos registrados en el panel principal.</td></tr>
                   )
                 ) : (
                   /* --- RENDER DEL HISTORIAL (Solo Lectura) --- */
@@ -569,12 +575,13 @@ function App() {
                             {pedido.estado}
                           </span>
                         </td>
-                        <td className="p-4 text-center font-semibold text-gray-600">{pedido.anticipo} Bs</td>
-                        <td className="p-4 text-center font-semibold text-gray-600">{pedido.saldo} Bs</td>
+                        <td className="p-4 text-center font-bold text-gray-800">
+                          {Number(pedido.anticipo) + Number(pedido.saldo)} Bs
+                        </td>
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan="5" className="p-8 text-center text-gray-400 italic">El historial está vacío. Aún no hay pedidos entregados o cancelados.</td></tr>
+                    <tr><td colSpan="4" className="p-8 text-center text-gray-400 italic">El historial está vacío. Aún no hay pedidos entregados o cancelados.</td></tr>
                   )
                 )}
               </tbody>
