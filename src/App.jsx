@@ -78,6 +78,18 @@ function App() {
     }
   }, [session]);
 
+  // Escucha el buscador del historial con un "Debounce" de 500ms
+  useEffect(() => {
+    if (vistaActiva === 'historial') {
+      const timeoutId = setTimeout(() => {
+        setPaginaHistorial(0); // Volvemos a la página 1
+        fetchHistorialPaginado(0, true, busqueda); // Buscamos en el servidor
+      }, 500);
+      
+      return () => clearTimeout(timeoutId); // Limpia el temporizador si sigue escribiendo
+    }
+  }, [busqueda, vistaActiva]);
+
   // Trae SOLO los pedidos activos para el Panel Principal
   const fetchPedidosActivos = async () => {
     const { data, error } = await supabase
@@ -90,27 +102,33 @@ function App() {
     else setPedidos(data);
   };
 
-  // Trae los pedidos cerrados por bloques (Paginación)
-  const fetchHistorialPaginado = async (paginaActual, resetear = false) => {
+  
+  // Trae los pedidos cerrados por bloques (Paginación) y con filtro en el servidor
+  const fetchHistorialPaginado = async (paginaActual, resetear = false, textoBusqueda = '') => {
     setCargandoHistorial(true);
     const desde = paginaActual * ITEMS_POR_PAGINA;
     const hasta = desde + ITEMS_POR_PAGINA - 1;
 
-    const { data, error } = await supabase
+    // 1. Preparamos la consulta base
+    let query = supabase
       .from('pedidos')
       .select('*')
       .in('estado', ['Entregado', 'Cancelado'])
-      .order('id', { ascending: false })
-      .range(desde, hasta);
+      .order('id', { ascending: false });
+
+    // 2. Si hay texto en el buscador, le decimos a Supabase que filtre en todos sus registros
+    if (textoBusqueda.trim() !== '') {
+      query = query.or(`cliente.ilike.%${textoBusqueda}%,celular.ilike.%${textoBusqueda}%`);
+    }
+
+    const { data, error } = await query.range(desde, hasta);
 
     if (!error && data) {
       if (resetear) {
         setPedidosHistorial(data);
       } else {
-        // Añade los nuevos 10 a los que ya estaban en pantalla
         setPedidosHistorial(prev => [...prev, ...data]);
       }
-      // Si trajo menos de 10, significa que ya no hay más en la base de datos
       setHayMasHistorial(data.length === ITEMS_POR_PAGINA);
     }
     setCargandoHistorial(false);
@@ -257,6 +275,18 @@ function App() {
     setSugerencias([]);         // Limpia la lista desplegable
   };
 
+  const limpiarMedidas = () => {
+    setForm(prev => ({
+      ...prev,
+      espalda: '', manga: '', abdomen: '', busto: '',
+      l_espalda_1a: '', l_espalda_sg: '', l_espalda_kp: '', l_espalda_4: '', l_espalda_3b: '', l_espalda_gr: '',
+      cintura: '', l_pantalon: '', e_pierna: '', cadera: '', muslo: '', botapie: '', rodilla: ''
+    }));
+    // También limpiamos los botones azules y morados, ya que será una prenda distinta
+    setChipsActivos([]);
+    setPanokaActivo(null);
+  };
+
   const handleInlineUpdate = async (id, campo, nuevoValor) => {
     // 1. Magia visual instantánea: Si se entrega o cancela, lo sacamos de la pantalla
     if (campo === 'estado' && (nuevoValor === 'Entregado' || nuevoValor === 'Cancelado')) {
@@ -333,10 +363,7 @@ function App() {
     });
 
   // El Historial ya solo tiene entregados/cancelados, solo aplicamos el buscador
-  const pedidosHistorialFiltrados = pedidosHistorial.filter(pedido => {
-    const coincideBusqueda = pedido.cliente.toLowerCase().includes(busqueda.toLowerCase()) || (pedido.celular && pedido.celular.includes(busqueda));
-    return coincideBusqueda;
-  });
+  const pedidosHistorialFiltrados = pedidosHistorial;
 
   const chipsNormales = ['1A', 'Aula#2', '1C', '3B Tercera', '#4 Abrigo', 'SG', 'Parka', 'KP'];
   const mappingEspalda = [
@@ -592,7 +619,7 @@ function App() {
                   onClick={() => {
                     const siguientePagina = paginaHistorial + 1;
                     setPaginaHistorial(siguientePagina);
-                    fetchHistorialPaginado(siguientePagina);
+                    fetchHistorialPaginado(siguientePagina, false, busqueda);
                   }}
                   disabled={cargandoHistorial}
                   className="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium shadow-sm transition-colors disabled:opacity-50"
@@ -652,6 +679,20 @@ function App() {
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Pedido</label><input type="date" name="fecha_pedido" value={form.fecha_pedido} onChange={handleChangeCorrecto} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Entrega</label><input type="date" name="fecha_entrega" value={form.fecha_entrega} onChange={handleChangeCorrecto} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
             </div>
+
+                {/* Encabezado de Medidas con Botón de Limpieza */}
+            <div className="flex justify-between items-end mb-4 mt-8">
+              <h3 className="text-lg font-bold text-gray-800">Especificaciones de la Prenda</h3>
+              <button 
+                type="button" 
+                onClick={limpiarMedidas} 
+                className="text-sm flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 px-3 py-1.5 rounded-lg font-medium transition-colors border border-red-200 shadow-sm"
+                title="Borrar todas las medidas para registrar una prenda nueva"
+              >
+                🧹 Limpiar medidas
+              </button>
+            </div>
+            
 
             {/* Fila 2 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
