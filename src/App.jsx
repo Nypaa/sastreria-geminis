@@ -85,7 +85,7 @@ function App() {
         setPaginaHistorial(0); // Volvemos a la página 1
         fetchHistorialPaginado(0, true, busqueda); // Buscamos en el servidor
       }, 500);
-      
+
       return () => clearTimeout(timeoutId); // Limpia el temporizador si sigue escribiendo
     }
   }, [busqueda, vistaActiva]);
@@ -102,19 +102,21 @@ function App() {
     else setPedidos(data);
   };
 
-  
+
   // Trae los pedidos cerrados por bloques (Paginación) y con filtro en el servidor
   const fetchHistorialPaginado = async (paginaActual, resetear = false, textoBusqueda = '') => {
     setCargandoHistorial(true);
     const desde = paginaActual * ITEMS_POR_PAGINA;
     const hasta = desde + ITEMS_POR_PAGINA - 1;
 
-    // 1. Preparamos la consulta base
+    // 1. Preparamos la consulta base con la nueva lógica de orden
     let query = supabase
       .from('pedidos')
       .select('*')
       .in('estado', ['Entregado', 'Cancelado'])
-      .order('id', { ascending: false });
+      .order('hora_accion', { ascending: false, nullsFirst: false })   // 1º Prioridad: El click más reciente
+      .order('fecha_entrega', { ascending: false, nullsFirst: false }) // 2º Prioridad: Respaldo para pedidos viejos
+      .order('id', { ascending: false });                              // 3º Prioridad: Desempate final
 
     // 2. Si hay texto en el buscador, le decimos a Supabase que filtre en todos sus registros
     if (textoBusqueda.trim() !== '') {
@@ -288,29 +290,46 @@ function App() {
   };
 
   const handleInlineUpdate = async (id, campo, nuevoValor) => {
-    // 1. Magia visual instantánea: Si se entrega o cancela, lo sacamos de la pantalla
+    // 1. Magia visual instantánea en la interfaz
     if (campo === 'estado' && (nuevoValor === 'Entregado' || nuevoValor === 'Cancelado')) {
       setPedidos(pedidos.filter(p => p.id !== id));
     } else {
-      // Si es otro cambio (ej. anticipo o cambiar a 'En Proceso'), solo lo actualizamos
       setPedidos(pedidos.map(p => p.id === id ? { ...p, [campo]: nuevoValor } : p));
     }
 
     setCampoGuardado(`${id}-${campo}`);
 
-    // 2. Se actualiza en la nube de fondo silenciosamente
-    const { error } = await supabase.from('pedidos').update({ [campo]: nuevoValor }).eq('id', id);
+    // 2. NUEVO: Sanitización para la base de datos
+    // Si borra la fecha (texto vacío ''), lo convertimos en 'null' para que Supabase lo acepte
+    let valorFinalDB = nuevoValor;
+    if (campo === 'fecha_entrega' && nuevoValor === '') {
+      valorFinalDB = null;
+    }
+
+    // 3. Se actualiza en la nube de fondo silenciosamente
+    const { error } = await supabase.from('pedidos').update({ [campo]: valorFinalDB }).eq('id', id);
     if (!error) setTimeout(() => setCampoGuardado(null), 2000);
   };
 
   const ejecutarAccionFinal = async () => {
     const nuevoEstado = modalConfirmacion.accion === 'Entregar' ? 'Entregado' : 'Cancelado';
 
-    // 1. Cierra el modal AL INSTANTE para eliminar la sensación de lag
-    setModalConfirmacion({ isOpen: false, pedido: null, accion: '' });
+    // Capturamos el tiempo exacto
+    const ahoraMismo = new Date();
+    const hoyVisual = ahoraMismo.toISOString().split('T')[0]; // Ej: "2026-06-28" (Para el ojito y el panel)
+    const instanteExacto = ahoraMismo.toISOString(); // Ej: "2026-06-28T14:35:10.123Z" (Para ordenar)
 
-    // 2. Ejecuta la actualización de fondo (no esperamos la respuesta para la interfaz)
-    handleInlineUpdate(modalConfirmacion.pedido.id, 'estado', nuevoEstado);
+    setModalConfirmacion({ isOpen: false, pedido: null, accion: '' });
+    setPedidos(pedidos.filter(p => p.id !== modalConfirmacion.pedido.id));
+
+    // Guardamos ambas fechas
+    await supabase.from('pedidos')
+      .update({
+        estado: nuevoEstado,
+        fecha_entrega: hoyVisual,
+        hora_accion: instanteExacto
+      })
+      .eq('id', modalConfirmacion.pedido.id);
   };
 
   // --- FUNCIONES DE INTERFAZ ---
@@ -537,8 +556,16 @@ function App() {
                             )}
                           </div>
                         </td>
-                        <td className="p-4 text-center font-medium text-gray-700">
-                          {pedido.fecha_entrega ? formatearFecha(pedido.fecha_entrega) : <span className="text-gray-400 text-xs italic">Sin fecha</span>}
+                        <td className="p-4 text-center font-medium relative">
+                          <input
+                            type="date"
+                            value={pedido.fecha_entrega || ''}
+                            onChange={(e) => setPedidos(pedidos.map(p => p.id === pedido.id ? { ...p, fecha_entrega: e.target.value } : p))}
+                            onBlur={(e) => handleInlineUpdate(pedido.id, 'fecha_entrega', e.target.value)}
+                            className={`bg-transparent hover:bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-400 rounded outline-none p-1 cursor-pointer transition-all text-center w-32 ${!pedido.fecha_entrega ? 'text-gray-400 text-xs' : 'text-gray-700 text-sm'}`}
+                            title={!pedido.fecha_entrega ? "Sin fecha asignada" : "Modificar fecha"}
+                          />
+                          {campoGuardado === `${pedido.id}-fecha_entrega` && <span className="text-green-500 absolute top-2 right-0 font-bold z-10">✓</span>}
                         </td>
                         <td className="p-4 text-center">
                           <select value={pedido.estado} onChange={(e) => handleInlineUpdate(pedido.id, 'estado', e.target.value)} className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer outline-none appearance-none text-center ${getEstadoColor(pedido.estado)}`}>
@@ -680,19 +707,19 @@ function App() {
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Entrega</label><input type="date" name="fecha_entrega" value={form.fecha_entrega} onChange={handleChangeCorrecto} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
             </div>
 
-                {/* Encabezado de Medidas con Botón de Limpieza */}
+            {/* Encabezado de Medidas con Botón de Limpieza */}
             <div className="flex justify-between items-end mb-4 mt-8">
               <h3 className="text-lg font-bold text-gray-800">Especificaciones de la Prenda</h3>
-              <button 
-                type="button" 
-                onClick={limpiarMedidas} 
+              <button
+                type="button"
+                onClick={limpiarMedidas}
                 className="text-sm flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 px-3 py-1.5 rounded-lg font-medium transition-colors border border-red-200 shadow-sm"
                 title="Borrar todas las medidas para registrar una prenda nueva"
               >
                 🧹 Limpiar medidas
               </button>
             </div>
-            
+
 
             {/* Fila 2 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
